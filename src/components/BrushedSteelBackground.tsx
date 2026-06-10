@@ -10,7 +10,7 @@ import {
   TOP_DOOR_HEIGHT_VH_COMPACT,
   TOP_DOOR_HEIGHT_VH_DESKTOP,
 } from "../constants/viewportScale";
-import wallpaperUrl from "../../assets/Wallpaper/wallpaper.jpg";
+import wallpaperUrl from "../../assets/Wallpaper/wallpaper.JPG";
 
 interface BrushedSteelBackgroundProps {
   children?: React.ReactNode;

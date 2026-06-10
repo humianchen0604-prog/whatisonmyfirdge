@@ -10,7 +10,7 @@ import {
 } from "./placePhotos";
 
 const imageModules = import.meta.glob(
-  "../../assets/Places/**/*.{png,jpg,jpeg,webp}",
+  "../../assets/Places/**/*.{png,jpg,jpeg,webp,JPG,JPEG}",
   { eager: true, import: "default" }
 ) as Record<string, string>;
 
