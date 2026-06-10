@@ -171,10 +171,7 @@ function MagnetBoard() {
         obstacles
       );
 
-      if (
-        separated.length === boardPlaces.length &&
-        !hasLayoutOverlaps(separated, canvas, obstacles)
-      ) {
+      if (separated.length === boardPlaces.length) {
         setPlaces(separated);
         setTopZIndex(separated.length);
       }

@@ -590,7 +590,8 @@ export function computeMagnetWidth(
     bestWidth = Math.max(bestWidth, Math.floor(widthFromCell));
   }
 
-  const densityScale = itemCount > 26 ? 0.92 : itemCount > 20 ? 0.96 : 1;
+  const densityScale =
+    itemCount > 26 ? 0.85 : itemCount > 20 ? 0.88 : itemCount > 14 ? 0.94 : 1;
   const areaPerItem = (usableW * usableH) / Math.max(itemCount, 1);
   const maxFromArea = Math.sqrt(areaPerItem * 0.5);
   const cappedWidth = Math.min(bestWidth * 1.35 * densityScale, maxFromArea);
@@ -598,16 +599,16 @@ export function computeMagnetWidth(
   return Math.max(Math.round(24 * scale), Math.round(cappedWidth));
 }
 
-/** Place sticker width — viewport-scaled, not inflated when a year has fewer places. */
+/** Place sticker width — scales down when more magnets need to fit on the door. */
 export function computePlaceMagnetWidth(
   canvasWidth: number,
   canvasHeight: number,
-  _itemCount?: number
+  itemCount = MAGNET_LAYOUT_REFERENCE_COUNT
 ): number {
   const baseWidth = computeMagnetWidth(
     canvasWidth,
     canvasHeight,
-    MAGNET_LAYOUT_REFERENCE_COUNT
+    itemCount
   );
   const multiplier = getPlaceMagnetSizeMultiplier(canvasWidth, canvasHeight);
 
@@ -617,10 +618,10 @@ export function computePlaceMagnetWidth(
 export function computePlaceMagnetWidthBounds(
   canvasWidth: number,
   canvasHeight: number,
-  _itemCount?: number
+  itemCount = MAGNET_LAYOUT_REFERENCE_COUNT
 ): { min: number; max: number } {
   const scale = computeDoorScale(canvasWidth, canvasHeight);
-  const max = computePlaceMagnetWidth(canvasWidth, canvasHeight);
+  const max = computePlaceMagnetWidth(canvasWidth, canvasHeight, itemCount);
   const min = Math.max(10, Math.round(14 * scale));
 
   return { min, max: Math.max(min, max) };
@@ -657,7 +658,11 @@ export async function findLargestNonOverlappingLayout(
   obstacles: PlaceBounds[],
   loadWithWidth: (width: number) => Promise<PlaceItem[]>
 ): Promise<PlaceItem[]> {
-  const { min, max } = computePlaceMagnetWidthBounds(canvas.width, canvas.height);
+  const { min, max } = computePlaceMagnetWidthBounds(
+    canvas.width,
+    canvas.height,
+    places.length
+  );
   const widthStep = max > 80 ? 2 : 1;
 
   for (let width = max; width >= min; width -= widthStep) {
@@ -690,7 +695,13 @@ export async function findLargestNonOverlappingLayout(
     if (grid.length === places.length) return grid;
   }
 
-  return [];
+  const withDimensions = await loadWithWidth(min);
+  return separateAllPlaces(
+    layoutPlacesSpread(withDimensions, canvas, undefined, obstacles),
+    canvas,
+    undefined,
+    obstacles
+  );
 }
 
 export function packPlacesHorizontally(
