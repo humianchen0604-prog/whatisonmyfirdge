@@ -1,0 +1,6 @@
+{
+  "name": "Stainless Magnet Board",
+  "description": "An interactive digital brushed steel refrigerator board with draggable realistic magnets, polaroid clips, dry-erase marker drawing, kitchen timer, and AI recipe helper.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
