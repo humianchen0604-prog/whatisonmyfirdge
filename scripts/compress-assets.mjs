@@ -1,10 +1,10 @@
 /**
- * Compress images under assets/ for smaller git + Vercel deploys.
+ * Compress images under assets/ for faster web loading and smaller deploys.
  *
  * Usage:
- *   npm run compress:assets -- --dry-run          # preview only
- *   npm run compress:assets -- --backup           # backup then compress
- *   npm run compress:assets -- --backup --dry-run
+ *   npm run compress:assets -- --dry-run
+ *   npm run compress:assets -- --backup
+ *   npm run compress:assets -- --backup --force   # re-compress already optimized files
  */
 
 import fs from "node:fs/promises";
@@ -19,13 +19,15 @@ const BACKUP_DIR = path.join(ROOT, "assets-backup");
 
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
-/** @type {Record<string, { maxEdge: number; jpegQuality: number; pngCompression: number }>} */
+/** @type {Record<string, { maxEdge: number; quality: number; format: "webp" | "jpeg" | "png" }>} */
 const PROFILES = {
-  Photos: { maxEdge: 1920, jpegQuality: 82, pngCompression: 9 },
-  Places: { maxEdge: 1200, jpegQuality: 82, pngCompression: 9 },
-  Wallpaper: { maxEdge: 2560, jpegQuality: 85, pngCompression: 9 },
-  Decor: { maxEdge: 1600, jpegQuality: 85, pngCompression: 9 },
-  default: { maxEdge: 1920, jpegQuality: 82, pngCompression: 9 },
+  // Magnets render ~120–220px wide on the fridge — 640px is plenty for retina.
+  Places: { maxEdge: 640, quality: 74, format: "webp" },
+  // Polaroid photo area is small — 1024px covers hover previews well.
+  Photos: { maxEdge: 1024, quality: 76, format: "webp" },
+  Wallpaper: { maxEdge: 1920, quality: 78, format: "jpeg" },
+  Decor: { maxEdge: 960, quality: 80, format: "webp" },
+  default: { maxEdge: 1280, quality: 78, format: "webp" },
 };
 
 const args = new Set(process.argv.slice(2));
@@ -68,6 +70,48 @@ async function backupFile(sourcePath, relativePath) {
   await fs.copyFile(sourcePath, destPath);
 }
 
+async function encodeImage(pipeline, profile, ext, hasAlpha) {
+  const { quality, format } = profile;
+
+  if (format === "jpeg") {
+    return pipeline.jpeg({ quality, mozjpeg: true }).toBuffer();
+  }
+
+  if (format === "webp") {
+    return pipeline
+      .webp({
+        quality,
+        alphaQuality: quality,
+        effort: 5,
+      })
+      .toBuffer();
+  }
+
+  if (ext === ".png" || hasAlpha) {
+    return pipeline
+      .png({
+        compressionLevel: 9,
+        adaptiveFiltering: true,
+        palette: !hasAlpha,
+      })
+      .toBuffer();
+  }
+
+  return pipeline.jpeg({ quality, mozjpeg: true }).toBuffer();
+}
+
+function outputExtension(profile, inputExt, hasAlpha) {
+  if (profile.format === "jpeg") {
+    if (inputExt === ".JPG") return ".JPG";
+    if (inputExt === ".JPEG") return ".JPEG";
+    if (inputExt === ".jpeg") return ".jpeg";
+    return ".jpg";
+  }
+  if (profile.format === "webp") return ".webp";
+  if (inputExt === ".png" || hasAlpha) return ".png";
+  return ".jpg";
+}
+
 async function compressImage(filePath) {
   const relativePath = path.relative(ASSETS_DIR, filePath);
   const profile = profileFor(relativePath);
@@ -80,15 +124,17 @@ async function compressImage(filePath) {
   const longestEdge = Math.max(metadata.width ?? 0, metadata.height ?? 0);
 
   const needsResize = longestEdge > profile.maxEdge;
-  const minSavingsBytes = 32 * 1024;
+  const skipSizeThreshold = profile.format === "webp" ? 120 * 1024 : 200 * 1024;
+  const minSavingsBytes = force ? 4 * 1024 : 16 * 1024;
 
-  if (!force && !needsResize && originalStat.size < 400 * 1024) {
+  if (!force && !needsResize && originalStat.size < skipSizeThreshold) {
     return {
       relativePath,
       skipped: true,
       reason: "already small",
       before: originalStat.size,
       after: originalStat.size,
+      outputPath: filePath,
     };
   }
 
@@ -99,33 +145,22 @@ async function compressImage(filePath) {
     withoutEnlargement: true,
   });
 
-  /** @type {Buffer} */
-  let output;
-
-  if (ext === ".png" || (hasAlpha && ext !== ".jpg" && ext !== ".jpeg")) {
-    output = await pipeline
-      .png({
-        compressionLevel: profile.pngCompression,
-        adaptiveFiltering: true,
-        palette: !hasAlpha,
-      })
-      .toBuffer();
-  } else if (ext === ".webp") {
-    output = await pipeline.webp({ quality: profile.jpegQuality }).toBuffer();
-  } else {
-    output = await pipeline
-      .jpeg({ quality: profile.jpegQuality, mozjpeg: true })
-      .toBuffer();
-  }
+  const output = await encodeImage(pipeline, profile, ext, hasAlpha);
+  const nextExt = outputExtension(profile, ext, hasAlpha);
+  const outputPath = path.join(
+    path.dirname(filePath),
+    `${path.basename(filePath, path.extname(filePath))}${nextExt}`
+  );
 
   const saved = originalStat.size - output.length;
-  if (!force && saved < minSavingsBytes) {
+  if (!force && saved < minSavingsBytes && outputPath === filePath) {
     return {
       relativePath,
       skipped: true,
       reason: "savings too small",
       before: originalStat.size,
       after: originalStat.size,
+      outputPath: filePath,
     };
   }
 
@@ -136,6 +171,7 @@ async function compressImage(filePath) {
       dryRun: true,
       before: originalStat.size,
       after: output.length,
+      outputPath,
     };
   }
 
@@ -143,15 +179,22 @@ async function compressImage(filePath) {
     await backupFile(filePath, relativePath);
   }
 
-  const tempPath = `${filePath}.compressing`;
+  const tempPath = `${outputPath}.compressing`;
   await fs.writeFile(tempPath, output);
-  await fs.rename(tempPath, filePath);
+  await fs.rename(tempPath, outputPath);
+
+  const sameFileIgnoringCase =
+    path.resolve(outputPath).toLowerCase() === path.resolve(filePath).toLowerCase();
+  if (outputPath !== filePath && !sameFileIgnoringCase) {
+    await fs.unlink(filePath);
+  }
 
   return {
-    relativePath,
+    relativePath: path.relative(ASSETS_DIR, outputPath),
     skipped: false,
     before: originalStat.size,
     after: output.length,
+    outputPath,
   };
 }
 
@@ -181,8 +224,12 @@ async function main() {
 
       changed += 1;
       const tag = result.dryRun ? "[dry-run]" : "[saved]";
+      const renamed =
+        result.outputPath && path.basename(result.outputPath) !== path.basename(filePath)
+          ? ` -> ${path.basename(result.outputPath)}`
+          : "";
       console.log(
-        `${tag} ${result.relativePath}: ${formatBytes(result.before)} -> ${formatBytes(result.after)} (${formatBytes(result.before - result.after)} saved)`
+        `${tag} ${result.relativePath}${renamed}: ${formatBytes(result.before)} -> ${formatBytes(result.after)} (${formatBytes(result.before - result.after)} saved)`
       );
     } catch (error) {
       console.error(`Failed: ${path.relative(ASSETS_DIR, filePath)}`, error);
@@ -197,7 +244,7 @@ async function main() {
 
   if (dryRun) {
     console.log("\nDry run only — no files were modified.");
-    console.log("Run: npm run compress:assets -- --backup");
+    console.log("Run: npm run compress:assets -- --backup --force");
   } else if (useBackup) {
     console.log(`\nOriginals backed up to ${path.relative(ROOT, BACKUP_DIR)}/`);
   }

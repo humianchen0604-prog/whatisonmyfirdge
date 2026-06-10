@@ -5,12 +5,12 @@
 
 import { PlaceBounds, computeMagnetWidth } from "../utils/placeCollision";
 import { computeDoorScale, scalePx } from "./viewportScale";
-import C from "../../assets/Decor/C.png";
-import E from "../../assets/Decor/E.png";
-import H from "../../assets/Decor/H.png";
-import R1 from "../../assets/Decor/R1.png";
-import R2 from "../../assets/Decor/R2.png";
-import Y from "../../assets/Decor/Y.png";
+import C from "../../assets/Decor/C.webp";
+import E from "../../assets/Decor/E.webp";
+import H from "../../assets/Decor/H.webp";
+import R1 from "../../assets/Decor/R1.webp";
+import R2 from "../../assets/Decor/R2.webp";
+import Y from "../../assets/Decor/Y.webp";
 
 export const CHERRY_LETTERS_OBSTACLE_ID = "__cherry-letters__";
 export const CHERRY_LETTER_GAP_PT = 1;

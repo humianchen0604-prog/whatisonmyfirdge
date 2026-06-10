@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from "react";
-import handleUrl from "../../assets/Decor/Handle.png";
+import handleUrl from "../../assets/Decor/Handle.webp";
 import { getFridgeHandlePosition } from "../constants/fridgeHandle";
 import { useDoorCanvas } from "../context/DoorCanvasContext";
 

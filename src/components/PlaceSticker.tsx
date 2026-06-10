@@ -91,6 +91,8 @@ export default function PlaceSticker({
         src={place.imageUrl}
         alt={place.name}
         draggable={false}
+        loading="lazy"
+        decoding="async"
         className="w-full h-full object-contain pointer-events-none"
         style={{
           filter: isDragging ? MAGNET_SHADOW_DRAG : MAGNET_SHADOW,
