@@ -2,6 +2,7 @@ node_modules/
 build/
 dist/
 coverage/
+assets-backup/
 .DS_Store
 *.log
 *.swp
